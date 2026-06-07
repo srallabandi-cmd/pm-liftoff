@@ -62,9 +62,12 @@ export default function Home() {
 
       <main className="w-full max-w-2xl z-10 relative">
         <div className="mb-12 text-center animate-fade-in">
-          <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 to-rose-400 bg-clip-text text-transparent">
-            PM Liftoff
-          </h1>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[20px] border-b-purple-500"></div>
+            <h1 className="text-4xl font-extrabold tracking-[-0.02em] font-[family-name:var(--font-space-grotesk)] bg-gradient-to-r from-indigo-400 to-rose-400 bg-clip-text text-transparent">
+              PM Liftoff
+            </h1>
+          </div>
           <p className="text-neutral-400 mt-2">Elevate your product sense for the AI era.</p>
         </div>
 
@@ -194,12 +197,14 @@ export default function Home() {
 
           {screen === 'RESULTS' && results && (
             <div className="space-y-8 animate-fade-in w-full">
-              <div className="text-center">
+              <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold text-neutral-100 mb-2">Evaluation Results</h2>
                 <p className="text-neutral-400">Here's how your eval definition scored.</p>
               </div>
 
-              <div className="space-y-6">
+              <CircularGauge score={(results.evalThinking + results.specPrecision + results.failureModeAwareness) / 3} />
+
+              <div className="space-y-6 mt-8">
                 <ScoreBar label="Eval Thinking" score={results.evalThinking} />
                 <ScoreBar label="Spec Precision" score={results.specPrecision} />
                 <ScoreBar label="Failure-Mode Awareness" score={results.failureModeAwareness} />
@@ -247,6 +252,78 @@ function ScoreBar({ label, score }: { label: string; score: number }) {
           style={{ width: `${percentage}%` }}
         >
           <div className="absolute inset-0 bg-white/20 w-full h-full transform -skew-x-12 translate-x-[-100%] animate-[shimmer_2s_infinite]"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CircularGauge({ score }: { score: number }) {
+  const percentage = (score / 5) * 100;
+  
+  let colorClass = "text-red-500";
+  let strokeClass = "stroke-red-500";
+  if (score >= 4) {
+    colorClass = "text-emerald-500";
+    strokeClass = "stroke-emerald-500";
+  } else if (score >= 2.5) {
+    colorClass = "text-amber-500";
+    strokeClass = "stroke-amber-500";
+  }
+
+  let tier = "Early";
+  let tierColor = "bg-red-500/10 text-red-400 border-red-500/20";
+  if (score >= 4.5) {
+    tier = "Sharp";
+    tierColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+  } else if (score >= 3.5) {
+    tier = "Strong";
+    tierColor = "bg-green-500/10 text-green-400 border-green-500/20";
+  } else if (score >= 2.0) {
+    tier = "Developing";
+    tierColor = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+  }
+
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className="flex items-center justify-center gap-8 mb-8 bg-neutral-900/40 p-6 rounded-2xl border border-neutral-800/50">
+      <div className="relative flex items-center justify-center">
+        <svg className="w-32 h-32 transform -rotate-90">
+          <circle
+            cx="64"
+            cy="64"
+            r={radius}
+            stroke="currentColor"
+            strokeWidth="8"
+            fill="transparent"
+            className="text-neutral-800"
+          />
+          <circle
+            cx="64"
+            cy="64"
+            r={radius}
+            stroke="currentColor"
+            strokeWidth="8"
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className={`${strokeClass} transition-all duration-1000 ease-out`}
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute flex flex-col items-center justify-center">
+          <span className={`text-3xl font-bold ${colorClass}`}>{score.toFixed(1)}</span>
+          <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-semibold mt-1">out of 5</span>
+        </div>
+      </div>
+      
+      <div className="flex flex-col">
+        <h3 className="text-xl font-bold text-neutral-200 mb-2">AI PM Readiness</h3>
+        <div className={`inline-flex items-center self-start px-3 py-1 rounded-full border text-sm font-semibold tracking-wide ${tierColor}`}>
+          {tier}
         </div>
       </div>
     </div>
