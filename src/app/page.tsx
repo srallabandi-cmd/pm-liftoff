@@ -240,15 +240,29 @@ export default function Home() {
 function ScoreBar({ label, score }: { label: string; score: number }) {
   const percentage = (score / 5) * 100;
   
+  let chipClass = "text-red-400 bg-red-500/10 border border-red-500/20";
+  let barClass = "bg-red-500";
+  let hoverTextClass = "group-hover:text-red-400";
+
+  if (score >= 4) {
+    chipClass = "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20";
+    barClass = "bg-emerald-500";
+    hoverTextClass = "group-hover:text-emerald-400";
+  } else if (score >= 3) {
+    chipClass = "text-amber-400 bg-amber-500/10 border border-amber-500/20";
+    barClass = "bg-amber-500";
+    hoverTextClass = "group-hover:text-amber-400";
+  }
+
   return (
     <div className="group">
       <div className="flex justify-between items-end mb-2">
-        <span className="text-sm font-medium text-neutral-200 group-hover:text-indigo-300 transition-colors">{label}</span>
-        <span className="text-xs font-bold text-neutral-400 bg-neutral-800 px-2 py-1 rounded-md">{score} / 5</span>
+        <span className={`text-sm font-medium text-neutral-200 transition-colors ${hoverTextClass}`}>{label}</span>
+        <span className={`text-xs font-bold px-2 py-1 rounded-md ${chipClass}`}>{score} / 5</span>
       </div>
       <div className="h-3 w-full bg-neutral-800 rounded-full overflow-hidden shadow-inner">
         <div 
-          className="h-full bg-gradient-to-r from-indigo-500 to-rose-400 transition-all duration-1000 ease-out rounded-full relative"
+          className={`h-full transition-all duration-1000 ease-out rounded-full relative ${barClass}`}
           style={{ width: `${percentage}%` }}
         >
           <div className="absolute inset-0 bg-white/20 w-full h-full transform -skew-x-12 translate-x-[-100%] animate-[shimmer_2s_infinite]"></div>
