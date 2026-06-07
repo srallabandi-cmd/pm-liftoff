@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { DIAGNOSTIC_TASKS } from '@/lib/tasks';
 
 type Screen = 'INTAKE' | 'DIAGNOSTIC' | 'LOADING' | 'RESULTS';
 
@@ -12,17 +13,19 @@ export default function Home() {
   const [domain, setDomain] = useState('');
   const [aiExposure, setAiExposure] = useState('none');
 
-  // Diagnostic State
-  const [definition, setDefinition] = useState('');
-  const [testCases, setTestCases] = useState('');
+  // Diagnostic Task State
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+  const [taskInputs, setTaskInputs] = useState<Record<string, string>>({});
 
-  // Results State
-  const [results, setResults] = useState<{
-    evalThinking: number;
-    specPrecision: number;
-    failureModeAwareness: number;
+  // All Tasks Results
+  const [allResults, setAllResults] = useState<{
+    taskIndex: number;
+    scores: Record<string, number>;
     feedback: string;
-  } | null>(null);
+  }[]>([]);
+
+  // Error State
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleIntakeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,25 +34,62 @@ export default function Home() {
 
   const handleDiagnosticSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const currentTask = DIAGNOSTIC_TASKS[currentTaskIndex];
+    const cleanedInputs: Record<string, string> = {};
+    for (const input of currentTask.inputs) {
+      const val = (taskInputs[input.id] || '').trim();
+      if (!val) {
+        setErrorMsg(`Please fill out: ${input.label}`);
+        return;
+      }
+      cleanedInputs[input.id] = val;
+    }
+
     setScreen('LOADING');
+    setErrorMsg(null);
 
     try {
       const res = await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definition, testCases }),
+        body: JSON.stringify({
+          title: currentTask.title,
+          scenario: currentTask.scenario,
+          inputs: cleanedInputs,
+          criteria: currentTask.criteria,
+        }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        throw new Error('Failed to score');
+        throw new Error(data.error || 'Failed to score');
       }
 
-      const data = await res.json();
-      setResults(data);
-      setScreen('RESULTS');
-    } catch (error) {
+      const scores: Record<string, number> = {};
+      currentTask.criteria.forEach(c => {
+        scores[c.id] = data[c.id] || 0;
+      });
+
+      const newResults = [...allResults, {
+        taskIndex: currentTaskIndex,
+        scores,
+        feedback: data.feedback || '',
+      }];
+
+      setAllResults(newResults);
+
+      if (currentTaskIndex < DIAGNOSTIC_TASKS.length - 1) {
+        setCurrentTaskIndex(currentTaskIndex + 1);
+        setTaskInputs({});
+        setScreen('DIAGNOSTIC');
+      } else {
+        setScreen('RESULTS');
+      }
+    } catch (error: any) {
       console.error(error);
-      alert('An error occurred. Please check console.');
+      setErrorMsg(error.message || 'An error occurred while scoring.');
       setScreen('DIAGNOSTIC');
     }
   };
@@ -68,7 +108,7 @@ export default function Home() {
               PM Liftoff
             </h1>
           </div>
-          <p className="text-neutral-400 mt-2">Elevate your product sense for the AI era.</p>
+          <p className="text-neutral-400 mt-2">Pressure-test how you'd reason as an AI PM.</p>
         </div>
 
         <div className="bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-2xl p-8 shadow-2xl transition-all duration-500 min-h-[400px] flex flex-col justify-center">
@@ -133,56 +173,60 @@ export default function Home() {
             </form>
           )}
 
-          {screen === 'DIAGNOSTIC' && (
-            <form onSubmit={handleDiagnosticSubmit} className="space-y-6 animate-fade-in w-full">
-              <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-neutral-100 mb-2">Diagnostic: Define an Eval</h2>
-                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 mt-4">
-                  <h3 className="text-sm font-medium text-indigo-300 mb-1">Scenario</h3>
-                  <p className="text-neutral-300 text-sm leading-relaxed">
-                    You are building a feature that summarizes customer support tickets. To ensure it works well, you need to define what a "good" summary looks like.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-300 mb-2">
-                    Define what a good summary looks like
-                  </label>
-                  <textarea
-                    required
-                    value={definition}
-                    onChange={(e) => setDefinition(e.target.value)}
-                    rows={4}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
-                    placeholder="A good summary should..."
-                  />
+          {screen === 'DIAGNOSTIC' && (() => {
+            const currentTask = DIAGNOSTIC_TASKS[currentTaskIndex];
+            return (
+              <form onSubmit={handleDiagnosticSubmit} className="space-y-6 animate-fade-in w-full">
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-2xl font-semibold text-neutral-100">{currentTask.title}</h2>
+                    <span className="text-sm font-medium text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+                      Task {currentTaskIndex + 1} of {DIAGNOSTIC_TASKS.length}
+                    </span>
+                  </div>
+                  <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 mt-4">
+                    <h3 className="text-sm font-medium text-indigo-300 mb-1">Scenario</h3>
+                    <p className="text-neutral-300 text-sm leading-relaxed">
+                      {currentTask.scenario}
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-neutral-300 mb-2">
-                    List 3 test cases to evaluate the AI
-                  </label>
-                  <textarea
-                    required
-                    value={testCases}
-                    onChange={(e) => setTestCases(e.target.value)}
-                    rows={4}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
-                    placeholder="1. A ticket where...&#10;2. A ticket with...&#10;3. A ticket that..."
-                  />
+                <div className="space-y-5">
+                  {currentTask.inputs.map((input) => (
+                    <div key={input.id}>
+                      <label className="block text-sm font-medium text-neutral-300 mb-2">
+                        {input.label}
+                      </label>
+                      <textarea
+                        required
+                        value={taskInputs[input.id] || ''}
+                        onChange={(e) => setTaskInputs(prev => ({ ...prev, [input.id]: e.target.value }))}
+                        rows={3}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
+                        placeholder={input.placeholder}
+                      />
+                    </div>
+                  ))}
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-indigo-500 to-rose-500 text-white font-semibold py-3 rounded-xl mt-8 hover:opacity-90 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300 transform active:scale-95"
-              >
-                Submit for Scoring
-              </button>
-            </form>
-          )}
+                {errorMsg && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center justify-between">
+                    <p className="text-red-400 text-sm font-medium">{errorMsg}</p>
+                    <button type="button" onClick={handleDiagnosticSubmit} className="text-red-300 hover:text-white text-sm font-bold underline">Retry</button>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={currentTask.inputs.some(input => !(taskInputs[input.id] || '').trim())}
+                  className="w-full bg-gradient-to-r from-indigo-500 to-rose-500 text-white font-semibold py-3 rounded-xl mt-8 hover:opacity-90 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] disabled:opacity-50 disabled:hover:shadow-none transition-all duration-300 transform active:scale-95"
+                >
+                  {currentTaskIndex < DIAGNOSTIC_TASKS.length - 1 ? 'Submit & Next Task' : 'Submit for Final Scoring'}
+                </button>
+              </form>
+            );
+          })()}
 
           {screen === 'LOADING' && (
             <div className="flex flex-col items-center justify-center py-12 animate-fade-in w-full">
@@ -195,42 +239,66 @@ export default function Home() {
             </div>
           )}
 
-          {screen === 'RESULTS' && results && (
-            <div className="space-y-8 animate-fade-in w-full">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-neutral-100 mb-2">Evaluation Results</h2>
-                <p className="text-neutral-400">Here's how your eval definition scored.</p>
+          {screen === 'RESULTS' && (() => {
+            let totalScore = 0;
+            let totalCriteria = 0;
+            allResults.forEach(res => {
+              Object.values(res.scores).forEach(s => {
+                totalScore += s;
+                totalCriteria += 1;
+              });
+            });
+            const compositeScore = totalCriteria > 0 ? (totalScore / totalCriteria) : 0;
+
+            return (
+              <div className="space-y-12 animate-fade-in w-full">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-neutral-100 mb-2">Evaluation Results</h2>
+                  <p className="text-neutral-400">Here's how your responses scored across all tasks.</p>
+                </div>
+
+                <CircularGauge score={compositeScore} />
+
+                <div className="space-y-10 mt-8">
+                  {allResults.map((result, idx) => {
+                    const task = DIAGNOSTIC_TASKS[result.taskIndex];
+                    return (
+                      <div key={idx} className="bg-neutral-900/40 p-6 rounded-2xl border border-neutral-800/50">
+                        <h3 className="text-xl font-bold text-neutral-200 mb-6 border-b border-neutral-800 pb-4">{task.title}</h3>
+                        
+                        <div className="space-y-6">
+                          {task.criteria.map(c => (
+                            <ScoreBar key={c.id} label={c.name} score={result.scores[c.id]} />
+                          ))}
+                        </div>
+
+                        <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 mt-8 relative overflow-hidden group hover:border-neutral-700 transition-all">
+                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-rose-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                          <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                            Feedback
+                          </h4>
+                          <p className="text-neutral-200 leading-relaxed text-sm">{result.feedback}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setCurrentTaskIndex(0);
+                    setTaskInputs({});
+                    setAllResults([]);
+                    setScreen('DIAGNOSTIC');
+                  }}
+                  className="w-full bg-neutral-800 text-neutral-200 font-semibold py-3 rounded-xl mt-4 hover:bg-neutral-700 transition-all duration-300 transform active:scale-95"
+                >
+                  Start Over
+                </button>
               </div>
-
-              <CircularGauge score={(results.evalThinking + results.specPrecision + results.failureModeAwareness) / 3} />
-
-              <div className="space-y-6 mt-8">
-                <ScoreBar label="Eval Thinking" score={results.evalThinking} />
-                <ScoreBar label="Spec Precision" score={results.specPrecision} />
-                <ScoreBar label="Failure-Mode Awareness" score={results.failureModeAwareness} />
-              </div>
-
-              <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 mt-8 relative overflow-hidden group hover:border-neutral-700 transition-all">
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-rose-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                  Feedback
-                </h3>
-                <p className="text-neutral-200 leading-relaxed text-sm">{results.feedback}</p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setDefinition('');
-                  setTestCases('');
-                  setScreen('DIAGNOSTIC');
-                }}
-                className="w-full bg-neutral-800 text-neutral-200 font-semibold py-3 rounded-xl mt-4 hover:bg-neutral-700 transition-all duration-300 transform active:scale-95"
-              >
-                Try Another Scenario
-              </button>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </main>
     </div>
